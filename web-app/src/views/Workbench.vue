@@ -1,5 +1,7 @@
 <template>
   <div class="workbench">
+    <StatsTopBar :slug="slug" />
+
     <n-spin :show="pageLoading" class="workbench-spin" description="加载工作台…">
       <div class="workbench-inner">
         <n-split direction="horizontal" :min="0.14" :max="0.42" :default-size="0.22">
@@ -85,6 +87,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useWorkbench } from '../composables/useWorkbench'
+import StatsTopBar from '../components/stats/StatsTopBar.vue'
 import ChapterList from '../components/workbench/ChapterList.vue'
 import ChatArea from '../components/workbench/ChatArea.vue'
 import SettingsPanel from '../components/workbench/SettingsPanel.vue'
@@ -146,10 +149,12 @@ onMounted(async () => {
   height: 100vh;
   min-height: 0;
   background: var(--app-page-bg, #f0f2f8);
+  display: flex;
+  flex-direction: column;
 }
 
 .workbench-spin {
-  height: 100%;
+  flex: 1;
   min-height: 0;
 }
 
