@@ -225,7 +225,7 @@ export const useStatsStore = defineStore('stats', () => {
    * @param slug - Book slug
    * @param chapterId - Chapter ID
    */
-  function onChapterSaved(slug: string, chapterId: string) {
+  function onChapterSaved(slug: string, chapterId: number) {
     if (bookStatsCache.value.has(slug)) {
       bookStatsCache.value.delete(slug)
     }
