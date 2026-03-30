@@ -208,6 +208,30 @@ export const useStatsStore = defineStore('stats', () => {
     error.value = null
   }
 
+  /**
+   * Handle job completion - invalidate cache and reload stats
+   * @param slug - Book slug
+   */
+  function onJobCompleted(slug: string) {
+    if (bookStatsCache.value.has(slug)) {
+      bookStatsCache.value.delete(slug)
+    }
+    loadBookStats(slug, true)
+    loadGlobalStats(true)
+  }
+
+  /**
+   * Handle chapter save - invalidate cache and reload book stats
+   * @param slug - Book slug
+   * @param chapterId - Chapter ID
+   */
+  function onChapterSaved(slug: string, chapterId: string) {
+    if (bookStatsCache.value.has(slug)) {
+      bookStatsCache.value.delete(slug)
+    }
+    loadBookStats(slug, true)
+  }
+
   return {
     // State
     globalStats,
@@ -232,5 +256,7 @@ export const useStatsStore = defineStore('stats', () => {
     loadBookAllStats,
     clearCache,
     clearError,
+    onJobCompleted,
+    onChapterSaved,
   }
 })
