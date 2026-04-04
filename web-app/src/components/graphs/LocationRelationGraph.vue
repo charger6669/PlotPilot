@@ -9,11 +9,11 @@
         <n-button size="small" secondary @click="goToKnowledge">编辑三元组</n-button>
       </n-space>
     </div>
-    <div v-if="emptyHint" class="lrg-empty">
-      <n-empty description="尚无地点三元组，请在「叙事与知识」中添加" size="small" />
-    </div>
-    <div v-else class="lrg-chart">
-      <GraphChart :nodes="graphData.nodes" :links="graphData.links" @node-click="handleNodeClick" />
+    <div class="lrg-chart">
+      <div v-if="emptyHint" class="lrg-empty">
+        <n-empty description="尚无地点三元组，请在「叙事与知识」中添加" size="small" />
+      </div>
+      <GraphChart v-else :nodes="graphData.nodes" :links="graphData.links" @node-click="handleNodeClick" />
     </div>
   </div>
 </template>
@@ -271,22 +271,23 @@ defineExpose({ reload })
   max-width: min(100%, 520px);
 }
 
+.lrg-chart {
+  flex: 1;
+  min-height: 400px;
+  overflow: hidden;
+  position: relative;
+}
+
 .lrg-empty {
   position: absolute;
   left: 0;
   right: 0;
-  top: 48px;
+  top: 0;
   bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   z-index: 1;
-}
-
-.lrg-chart {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
 }
 </style>

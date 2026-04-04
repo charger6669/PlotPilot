@@ -9,10 +9,12 @@
         <n-button size="small" secondary @click="goToKnowledge">编辑三元组</n-button>
       </n-space>
     </div>
-    <div v-if="emptyHint" class="crg-empty">
-      <n-empty description="尚无人物三元组，请在「叙事与知识」中添加" size="small" />
+    <div class="crg-chart">
+      <div v-if="emptyHint" class="crg-empty">
+        <n-empty description="尚无人物三元组，请在「叙事与知识」中添加" size="small" />
+      </div>
+      <GraphChart v-else :nodes="graphData.nodes" :links="graphData.links" height="100%" @node-click="handleNodeClick" />
     </div>
-    <GraphChart v-else :nodes="graphData.nodes" :links="graphData.links" height="100%" @node-click="handleNodeClick" />
   </div>
 </template>
 
@@ -213,11 +215,18 @@ onMounted(async () => {
   max-width: min(100%, 480px);
 }
 
+.crg-chart {
+  flex: 1;
+  min-height: 400px;
+  overflow: hidden;
+  position: relative;
+}
+
 .crg-empty {
   position: absolute;
   left: 0;
   right: 0;
-  top: 48px;
+  top: 0;
   bottom: 0;
   display: flex;
   align-items: center;
