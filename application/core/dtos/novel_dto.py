@@ -52,6 +52,8 @@ class NovelDTO:
     total_word_count: int
     has_bible: bool = False
     has_outline: bool = False
+    autopilot_status: str = "stopped"
+    auto_approve_mode: bool = False
 
     @classmethod
     def from_domain(cls, novel: 'Novel') -> 'NovelDTO':
@@ -64,6 +66,9 @@ class NovelDTO:
             NovelDTO
         """
         chapters = [ChapterDTO.from_domain(chapter) for chapter in novel.chapters]
+        
+        _ap = getattr(novel, 'autopilot_status', 'stopped')
+        autopilot_status = _ap.value if hasattr(_ap, 'value') else str(_ap)
 
         return cls(
             id=novel.novel_id.value,
@@ -73,5 +78,7 @@ class NovelDTO:
             stage=novel.stage.value,
             premise=getattr(novel, 'premise', ''),  # 兼容旧数据
             chapters=chapters,
-            total_word_count=novel.get_total_word_count().value
+            total_word_count=novel.get_total_word_count().value,
+            autopilot_status=autopilot_status,
+            auto_approve_mode=getattr(novel, 'auto_approve_mode', False),
         )

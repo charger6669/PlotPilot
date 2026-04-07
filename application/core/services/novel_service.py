@@ -285,6 +285,28 @@ class NovelService:
 
         return NovelDTO.from_domain(novel)
 
+    def update_auto_approve_mode(self, novel_id: str, auto_approve_mode: bool) -> NovelDTO:
+        """更新全自动模式设置
+
+        Args:
+            novel_id: 小说 ID
+            auto_approve_mode: 是否开启全自动模式
+
+        Returns:
+            更新后的 NovelDTO
+
+        Raises:
+            EntityNotFoundError: 如果小说不存在
+        """
+        novel = self.novel_repository.get_by_id(NovelId(novel_id))
+        if novel is None:
+            raise EntityNotFoundError("Novel", novel_id)
+
+        novel.auto_approve_mode = auto_approve_mode
+        self.novel_repository.save(novel)
+
+        return NovelDTO.from_domain(novel)
+
     def get_novel_statistics(self, novel_id: str) -> Dict[str, Any]:
         """获取小说统计信息（以 Chapter 仓储落盘为准，与列表/读写 API 一致）
 
