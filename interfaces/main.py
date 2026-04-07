@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import threading
+import multiprocessing
 
 # Core module
 from interfaces.api.v1.core import novels, chapters, scene_generation_routes
@@ -110,17 +111,54 @@ async def shutdown_event():
     logger.info(f"   Total uptime: {uptime:.2f} seconds ({uptime/3600:.2f} hours)")
     logger.info("=" * 80)
 
-# 守护进程线程管理
-_daemon_thread = None
+# 守护进程进程管理（使用独立进程避免阻塞主事件循环）
+_daemon_process = None
 _daemon_stop_event = None
 
 
-def _start_autopilot_daemon_thread():
-    """启动自动驾驶守护进程线程"""
-    global _daemon_thread, _daemon_stop_event
+def _run_daemon_in_process(stop_event: threading.Event, log_level: int, log_file: str):
+    """在独立进程中运行守护进程（完全隔离，不阻塞主进程）"""
+    # 重新配置日志（子进程需要独立配置）
+    from interfaces.api.middleware.logging_config import setup_logging
+    setup_logging(level=log_level, log_file=log_file)
     
-    if _daemon_thread is not None and _daemon_thread.is_alive():
-        logger.warning("⚠️  守护进程线程已在运行，跳过重复启动")
+    try:
+        from scripts.start_daemon import build_daemon
+        daemon = build_daemon()
+        logger.info("🚀 守护进程已启动（独立进程），开始轮询...")
+        
+        while not stop_event.is_set():
+            try:
+                # 执行守护进程的一个轮询周期
+                active_novels = daemon._get_active_novels()
+                
+                if active_novels:
+                    import asyncio
+                    for novel in active_novels:
+                        if stop_event.is_set():
+                            break
+                        # 使用独立事件循环处理每个小说
+                        asyncio.run(daemon._process_novel(novel))
+                
+                # 轮询间隔（使用 wait 而非 sleep，以便快速响应停止信号）
+                stop_event.wait(timeout=daemon.poll_interval)
+                
+            except Exception as e:
+                logger.error(f"❌ 守护进程异常: {e}", exc_info=True)
+                stop_event.wait(timeout=10)  # 异常后等待10秒
+                
+    except Exception as e:
+        logger.error(f"❌ 守护进程初始化失败: {e}", exc_info=True)
+    finally:
+        logger.info("🛑 守护进程已停止")
+
+
+def _start_autopilot_daemon_thread():
+    """启动自动驾驶守护进程（独立进程，不阻塞主事件循环）"""
+    global _daemon_process, _daemon_stop_event
+    
+    if _daemon_process is not None and _daemon_process.is_alive():
+        logger.warning("⚠️  守护进程已在运行，跳过重复启动")
         return
     
     # 检查环境变量是否禁用自动启动守护进程
@@ -128,62 +166,37 @@ def _start_autopilot_daemon_thread():
         logger.info("🔒 守护进程自动启动已禁用（DISABLE_AUTO_DAEMON=1）")
         return
     
-    from scripts.start_daemon import build_daemon
+    _daemon_stop_event = multiprocessing.Event()
     
-    _daemon_stop_event = threading.Event()
-    
-    def daemon_worker():
-        """守护进程工作线程"""
-        try:
-            daemon = build_daemon()
-            logger.info("🚀 守护进程线程已启动，开始轮询...")
-            
-            # 使用自定义的停止检查
-            while not _daemon_stop_event.is_set():
-                try:
-                    # 执行守护进程的一个轮询周期
-                    active_novels = daemon._get_active_novels()
-                    
-                    if active_novels:
-                        import asyncio
-                        for novel in active_novels:
-                            if _daemon_stop_event.is_set():
-                                break
-                            asyncio.run(daemon._process_novel(novel))
-                    
-                    # 轮询间隔
-                    _daemon_stop_event.wait(timeout=daemon.poll_interval)
-                    
-                except Exception as e:
-                    logger.error(f"❌ 守护进程线程异常: {e}", exc_info=True)
-                    _daemon_stop_event.wait(timeout=10)  # 异常后等待10秒
-                    
-        except Exception as e:
-            logger.error(f"❌ 守护进程线程初始化失败: {e}", exc_info=True)
-        finally:
-            logger.info("🛑 守护进程线程已停止")
-    
-    _daemon_thread = threading.Thread(target=daemon_worker, daemon=True, name="AutopilotDaemon")
-    _daemon_thread.start()
-    logger.info("✅ 守护进程线程已创建并启动")
+    # 使用独立进程运行守护进程，完全隔离于主进程的事件循环
+    _daemon_process = multiprocessing.Process(
+        target=_run_daemon_in_process,
+        args=(_daemon_stop_event, log_level, log_file),
+        name="AutopilotDaemon",
+        daemon=True,
+    )
+    _daemon_process.start()
+    logger.info("✅ 守护进程已创建并启动（独立进程模式）")
 
 
 def _stop_autopilot_daemon_thread():
-    """停止守护进程线程"""
-    global _daemon_thread, _daemon_stop_event
+    """停止守护进程"""
+    global _daemon_process, _daemon_stop_event
     
     if _daemon_stop_event:
-        logger.info("🛑 正在停止守护进程线程...")
+        logger.info("🛑 正在停止守护进程...")
         _daemon_stop_event.set()
         
-    if _daemon_thread and _daemon_thread.is_alive():
-        _daemon_thread.join(timeout=5)  # 等待最多5秒
-        if _daemon_thread.is_alive():
-            logger.warning("⚠️  守护进程线程未在超时时间内停止")
+    if _daemon_process and _daemon_process.is_alive():
+        _daemon_process.join(timeout=5)  # 等待最多5秒
+        if _daemon_process.is_alive():
+            logger.warning("⚠️  守护进程未在超时时间内停止，强制终止")
+            _daemon_process.terminate()
+            _daemon_process.join(timeout=2)
         else:
-            logger.info("✅ 守护进程线程已成功停止")
+            logger.info("✅ 守护进程已成功停止")
     
-    _daemon_thread = None
+    _daemon_process = None
     _daemon_stop_event = None
 
 
@@ -264,14 +277,14 @@ async def health_check():
         健康状态
     """
     uptime = time.time() - STARTUP_TIME
-    daemon_alive = _daemon_thread is not None and _daemon_thread.is_alive()
+    daemon_alive = _daemon_process is not None and _daemon_process.is_alive()
     return {
         "status": "healthy",
         "version": BACKEND_VERSION,
         "uptime_seconds": round(uptime, 2),
-        "daemon_thread": {
+        "daemon_process": {
             "running": daemon_alive,
-            "name": _daemon_thread.name if _daemon_thread else None
+            "pid": _daemon_process.pid if _daemon_process else None
         }
     }
 
